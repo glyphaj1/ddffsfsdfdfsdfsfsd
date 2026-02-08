@@ -187,3 +187,4 @@ if(quests.length === 0) {
 		}
 	}
 	doJob()
+} // forgot to add the curly brace earlier sorry :>
