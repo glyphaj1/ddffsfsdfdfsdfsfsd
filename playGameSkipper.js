@@ -14,25 +14,13 @@ delete window.$;
 let wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, r => r]);
 webpackChunkdiscord_app.pop();
 
-
-let ApplicationStreamingStore = Object.values(wpRequire.c).find(x => x?.exports?.Z?.__proto__?.getStreamerActiveStreamMetadata)?.exports?.Z;
-let RunningGameStore, QuestsStore, ChannelStore, GuildChannelStore, FluxDispatcher, api
-if(!ApplicationStreamingStore) {
-	ApplicationStreamingStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getStreamerActiveStreamMetadata).exports.A;
-	RunningGameStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getRunningGames).exports.Ay;
-	QuestsStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getQuest).exports.A;
-	ChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getAllThreadsForParent).exports.A;
-	GuildChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getSFWDefaultChannel).exports.Ay;
-	FluxDispatcher = Object.values(wpRequire.c).find(x => x?.exports?.h?.__proto__?.flushWaitQueue).exports.h;
-	api = Object.values(wpRequire.c).find(x => x?.exports?.Bo?.get).exports.Bo;
-} else {
-	RunningGameStore = Object.values(wpRequire.c).find(x => x?.exports?.ZP?.getRunningGames).exports.ZP;
-	QuestsStore = Object.values(wpRequire.c).find(x => x?.exports?.Z?.__proto__?.getQuest).exports.Z;
-	ChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.Z?.__proto__?.getAllThreadsForParent).exports.Z;
-	GuildChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.ZP?.getSFWDefaultChannel).exports.ZP;
-	FluxDispatcher = Object.values(wpRequire.c).find(x => x?.exports?.Z?.__proto__?.flushWaitQueue).exports.Z;
-	api = Object.values(wpRequire.c).find(x => x?.exports?.tn?.get).exports.tn;	
-}
+let ApplicationStreamingStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getStreamerActiveStreamMetadata).exports.A;
+let RunningGameStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getRunningGames).exports.Ay;
+let QuestsStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getQuest).exports.A;
+let ChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getAllThreadsForParent).exports.A;
+let GuildChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getSFWDefaultChannel).exports.Ay;
+let FluxDispatcher = Object.values(wpRequire.c).find(x => x?.exports?.h?.__proto__?.flushWaitQueue).exports.h;
+let api = Object.values(wpRequire.c).find(x => x?.exports?.Bo?.get).exports.Bo;
 
 const supportedTasks = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"]
 let quests = [...QuestsStore.quests.values()].filter(x => x.userStatus?.enrolledAt && !x.userStatus?.completedAt && new Date(x.config.expiresAt).getTime() > Date.now() && supportedTasks.find(y => Object.keys((x.config.taskConfig ?? x.config.taskConfigV2).tasks).includes(y)))
@@ -46,33 +34,31 @@ if(quests.length === 0) {
 
 		const pid = Math.floor(Math.random() * 30000) + 1000
 		
-		const applicationId = quest.config.application.id
-		const applicationName = quest.config.application.name
 		const questName = quest.config.messages.questName
 		const taskConfig = quest.config.taskConfig ?? quest.config.taskConfigV2
 		const taskName = supportedTasks.find(x => taskConfig.tasks[x] != null)
-		const secondsNeeded = taskConfig.tasks[taskName].target
+		const taskData = taskConfig.tasks[taskName]
+		const applicationId = quest.config.application?.id ?? taskData.applications?.[0]?.id
+		const secondsNeeded = taskData.target
 		let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0
 
 		if(taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
-			const maxFuture = 10, speed = 7, interval = 1
+			const speed = 7
 			const enrolledAt = new Date(quest.userStatus.enrolledAt).getTime()
 			let completed = false
 			let fn = async () => {			
 				while(true) {
-					const maxAllowed = Math.floor((Date.now() - enrolledAt)/1000) + maxFuture
-					const diff = maxAllowed - secondsDone
+					const remaining = Math.min(speed, secondsNeeded - secondsDone)
+					await new Promise(resolve => setTimeout(resolve, remaining * 1000))
+
 					const timestamp = secondsDone + speed
-					if(diff >= speed) {
-						const res = await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}})
-						completed = res.body.completed_at != null
-						secondsDone = Math.min(secondsNeeded, timestamp)
-					}
-					
+					const res = await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: Math.min(secondsNeeded, timestamp + Math.random())}})
+					completed = res.body.completed_at != null
+					secondsDone = Math.min(secondsNeeded, timestamp)
+
 					if(timestamp >= secondsNeeded) {
 						break
 					}
-					await new Promise(resolve => setTimeout(resolve, interval * 1000))
 				}
 				if(!completed) {
 					await api.post({url: `/quests/${quest.id}/video-progress`, body: {timestamp: secondsNeeded}})
@@ -88,7 +74,7 @@ if(quests.length === 0) {
 			} else {
 				api.get({url: `/applications/public?application_ids=${applicationId}`}).then(res => {
 					const appData = res.body[0]
-					const exeName = appData.executables.find(x => x.os === "win32").name.replace(">","")
+					const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">","") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "")
 					
 					const fakeGame = {
 						cmdLine: `C:\\Program Files\\${appData.name}\\${exeName}`,
@@ -128,7 +114,7 @@ if(quests.length === 0) {
 					}
 					FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn)
 					
-					console.log(`Spoofed your game to ${applicationName}. Wait for ${Math.ceil((secondsNeeded - secondsDone) / 60)} more minutes.`)
+					console.log(`Spoofed your game to ${appData.name}. Wait for ${Math.ceil((secondsNeeded - secondsDone) / 60)} more minutes.`)
 				})
 			}
 		} else if(taskName === "STREAM_ON_DESKTOP") {
@@ -157,7 +143,7 @@ if(quests.length === 0) {
 				}
 				FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn)
 				
-				console.log(`Spoofed your stream to ${applicationName}. Stream any window in vc for ${Math.ceil((secondsNeeded - secondsDone) / 60)} more minutes.`)
+				console.log(`Spoofed your stream to the target game. Stream any window in vc for ${Math.ceil((secondsNeeded - secondsDone) / 60)} more minutes.`)
 				console.log("Remember that you need at least 1 other person to be in the vc!")
 			}
 		} else if(taskName === "PLAY_ACTIVITY") {
@@ -187,4 +173,4 @@ if(quests.length === 0) {
 		}
 	}
 	doJob()
-} // forgot to add the curly brace earlier sorry :>
+} // thanks clay <3
